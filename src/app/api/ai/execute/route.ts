@@ -70,7 +70,28 @@ function extractJson(raw: string): unknown {
   return JSON.parse(cleaned);
 }
 
-async function executeOne(baseUrl: string, intent: ActionIntent, params: Record<string, unknown>): Promise<ActionResult> {
+function normalizeParams(params: Record<string, unknown>): Record<string, unknown> {
+  const alias: Record<string, string> = {
+    titolo: "title", tit: "title", nome: "name",
+    progetto: "projectId", progettoId: "projectId", project: "projectId",
+    scadenza: "dueDate", deadline: "dueDate",
+    priorita: "priority", priorità: "priority",
+    urgente: "urgent", importante: "important",
+    descrizione: "description", desc: "description",
+    inizio: "start", fine: "end", inizia: "start",
+    note: "notes", minuti: "estimatedMinutes", durata: "estimatedMinutes",
+    colore: "color",
+  };
+  const normalized: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(params)) {
+    const enKey = alias[key.toLowerCase()] || key;
+    normalized[enKey] = val;
+  }
+  return normalized;
+}
+
+async function executeOne(baseUrl: string, intent: ActionIntent, rawParams: Record<string, unknown>): Promise<ActionResult> {
+  const params = normalizeParams(rawParams);
   const label = (params.title || params.name || "Elemento") as string;
   try {
     switch (intent) {
