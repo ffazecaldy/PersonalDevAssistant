@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -12,7 +12,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -20,17 +19,23 @@ import {
   Sparkles,
   Brain,
   Calendar,
-  MessageSquarePlus,
+  FileText,
   CheckCircle2,
   XCircle,
   Loader2,
   AlertTriangle,
   Send,
   RotateCcw,
-  FileText,
+  ListTodo,
+  Flag,
+  Clock,
+  FolderKanban,
+  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
+
+// ── Types ────────────────────────────────────────────
 
 type AIMessage = {
   id: string;
@@ -39,33 +44,100 @@ type AIMessage = {
   timestamp: Date;
 };
 
-type ParsedNLP = {
-  title: string;
-  date: string | null;
-  time: string | null;
-  project: string | null;
-  type: "event" | "task";
-  confidence: number;
+type ActionIntent =
+  | "create_task"
+  | "create_milestone"
+  | "create_project"
+  | "create_event"
+  | "update_task"
+  | "update_project"
+  | "complete_task"
+  | "unknown";
+
+type ActionResult = {
+  type: ActionIntent;
+  label: string;
+  status: "created" | "updated" | "completed" | "skipped" | "error";
+  details: Record<string, unknown>;
+  error?: string;
 };
 
+type AiExecuteResponse = {
+  success?: boolean;
+  error?: string;
+  actions: ActionResult[];
+  summary: string;
+  raw_response?: string;
+};
+
+// ── Helpers ──────────────────────────────────────────
+
+const intentLabels: Record<ActionIntent, { label: string; icon: string }> = {
+  create_task: { label: "Task creato", icon: "📋" },
+  create_milestone: { label: "Milestone creata", icon: "🏁" },
+  create_project: { label: "Progetto creato", icon: "📁" },
+  create_event: { label: "Evento creato", icon: "📅" },
+  update_task: { label: "Task aggiornato", icon: "✏️" },
+  update_project: { label: "Progetto aggiornato", icon: "📂" },
+  complete_task: { label: "Task completato", icon: "✅" },
+  unknown: { label: "Non riconosciuto", icon: "❓" },
+};
+
+function intentIcon(intent: ActionIntent) {
+  switch (intent) {
+    case "create_task": return <ListTodo className="h-3.5 w-3.5 text-blue-500" />;
+    case "create_milestone": return <Flag className="h-3.5 w-3.5 text-orange-500" />;
+    case "create_project": return <FolderKanban className="h-3.5 w-3.5 text-green-500" />;
+    case "create_event": return <Calendar className="h-3.5 w-3.5 text-purple-500" />;
+    case "update_task":
+    case "update_project": return <span className="text-base">✏️</span>;
+    case "complete_task": return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
+    default: return <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />;
+  }
+}
+
+function intentBadgeColor(intent: ActionIntent) {
+  switch (intent) {
+    case "create_task": return "text-blue-500 bg-blue-500/10 border-blue-500/20";
+    case "create_milestone": return "text-orange-500 bg-orange-500/10 border-orange-500/20";
+    case "create_project": return "text-green-500 bg-green-500/10 border-green-500/20";
+    case "create_event": return "text-purple-500 bg-purple-500/10 border-purple-500/20";
+    case "update_task":
+    case "update_project": return "text-amber-500 bg-amber-500/10 border-amber-500/20";
+    case "complete_task": return "text-green-600 bg-green-600/10 border-green-600/20";
+    default: return "text-muted-foreground bg-muted/50";
+  }
+}
+
+function formatDetails(details: Record<string, unknown>): { label: string; value: string }[] {
+  const items: { label: string; value: string }[] = [];
+  if (details.title) items.push({ label: "Titolo", value: details.title as string });
+  if (details.name) items.push({ label: "Nome", value: details.name as string });
+  if (details.project) items.push({ label: "Progetto", value: details.project as string });
+  if (details.start) {
+    try {
+      items.push({ label: "Inizio", value: formatDate(details.start as string) });
+    } catch {
+      items.push({ label: "Inizio", value: details.start as string });
+    }
+  }
+  return items;
+}
+
+// ── Component ────────────────────────────────────────
+
 export default function AiPage() {
-  const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: "welcome",
       role: "system",
-      content: "Benvenuto nell'AI Assistant! Seleziona una funzionalità qui sotto o scrivi un messaggio per chattare con l'assistente.",
+      content: "Benvenuto nell'AI Assistant! Scrivi cosa vuoi creare o modificare in linguaggio naturale, oppure usa le azioni rapide a destra.",
       timestamp: new Date(),
     },
   ]);
-
-  // NLP state
-  const [nlpInput, setNlpInput] = useState("");
-  const [parsedResult, setParsedResult] = useState<ParsedNLP | null>(null);
-
-  // Chat input state
   const [chatInput, setChatInput] = useState("");
 
   // Scroll to bottom on new messages
@@ -77,7 +149,6 @@ export default function AiPage() {
   const {
     data: modelsData,
     isLoading: modelsLoading,
-    isError: modelsError,
   } = useQuery({
     queryKey: ["ai-models"],
     queryFn: () => fetch("/api/ai/models").then((r) => r.json()),
@@ -94,20 +165,14 @@ export default function AiPage() {
     }
   }, [models, selectedModel]);
 
-  // Fetch today's tasks
-  const today = new Date();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-  const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
-
+  // Fetch today's tasks and projects for quick actions
   const { data: todayTasks } = useQuery({
     queryKey: ["tasks", "today"],
-    queryFn: () =>
-      fetch(`/api/tasks?status=TODO&status=IN_PROGRESS`).then((r) => r.json()),
+    queryFn: () => fetch("/api/tasks?status=TODO&status=IN_PROGRESS").then((r) => r.json()),
     enabled: ollamaAvailable,
   });
 
-  // Fetch week data for summary
-  const weekStart = new Date(today);
+  const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
   weekStart.setHours(0, 0, 0, 0);
   const weekEnd = new Date(weekStart);
@@ -134,28 +199,17 @@ export default function AiPage() {
     enabled: ollamaAvailable,
   });
 
-  // Chat mutation
-  const chatMutation = useMutation({
-    mutationFn: (params: { content: string }) =>
-      fetch("/api/ai/chat", {
+  // ── Execute mutation ───────────────────────────────────
+
+  const executeMutation = useMutation({
+    mutationFn: (content: string) =>
+      fetch("/api/ai/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [
-            ...messages
-              .filter((m) => m.role !== "system")
-              .slice(-10)
-              .map((m) => ({ role: m.role, content: m.content })),
-            { role: "user", content: params.content },
-          ],
-          system:
-            "Sei un assistente AI integrato in un Command Center per la produttività personale. Rispondi in italiano in modo chiaro e conciso.",
-        }),
+        body: JSON.stringify({ text: content, model: selectedModel }),
       }).then((r) => r.json()),
-    onSuccess: (data) => {
+    onSuccess: (data: AiExecuteResponse) => {
       if (data.error) {
-        toast.error(data.error);
         setMessages((prev) => [
           ...prev,
           {
@@ -165,35 +219,61 @@ export default function AiPage() {
             timestamp: new Date(),
           },
         ]);
+        toast.error(data.error);
         return;
       }
+
+      // Build a rich assistant message with formatted actions
+      const actionBlocks = data.actions
+        .map((a) => formatActionBlock(a))
+        .join("\n\n");
+
+      const assistantContent = [
+        data.summary ? `**${data.summary}**` : "",
+        actionBlocks ? `\n\n${actionBlocks}` : "",
+        data.raw_response && data.actions.some((a) => a.status === "error")
+          ? `\n\n<details><summary>Risposta tecnica</summary>\n\`\`\`\n${data.raw_response}\n\`\`\`\n</details>`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("");
+
       setMessages((prev) => [
         ...prev,
         {
-          id: `ai-${Date.now()}`,
+          id: `execute-${Date.now()}`,
           role: "assistant",
-          content: data.message?.content || "Nessuna risposta.",
+          content: assistantContent,
           timestamp: new Date(),
         },
       ]);
+
+      const errorCount = data.actions.filter((a) => a.status === "error").length;
+      if (errorCount > 0) {
+        toast.error(`${errorCount} azion${errorCount > 1 ? "i" : "e"} con error${errorCount > 1 ? "i" : "e"}`);
+      } else if (data.actions.length > 0) {
+        toast.success(data.summary);
+      }
     },
     onError: () => {
-      toast.error("Ollama non raggiungibile");
+      toast.error("Errore di connessione al server");
     },
   });
 
-  // Prioritize mutation
+  // ── Prioritize mutation ────────────────────────────────
+
   const prioritizeMutation = useMutation({
     mutationFn: () =>
-      fetch("/api/ai/prioritize", {
+      fetch("/api/ai/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          text: "Prioritizza i miei task di oggi, dammi un ordine di priorità e suggerimenti su cosa fare prima.",
           model: selectedModel,
           tasks: Array.isArray(todayTasks) ? todayTasks : [],
         }),
       }).then((r) => r.json()),
-    onSuccess: (data) => {
+    onSuccess: (data: AiExecuteResponse) => {
       if (data.error) {
         toast.error(data.error);
         return;
@@ -203,7 +283,7 @@ export default function AiPage() {
         {
           id: `prioritize-${Date.now()}`,
           role: "assistant",
-          content: `## 📋 Prioritizzazione Giornata\n\n${data.response}`,
+          content: `## 📋 Prioritizzazione Giornata\n\n${data.summary}\n\n${data.actions.map((a) => formatActionBlock(a)).join("\n\n")}`,
           timestamp: new Date(),
         },
       ]);
@@ -212,7 +292,8 @@ export default function AiPage() {
     onError: () => toast.error("Errore durante la prioritizzazione"),
   });
 
-  // Summary mutation
+  // ── Summary mutation ───────────────────────────────────
+
   const summaryMutation = useMutation({
     mutationFn: () =>
       fetch("/api/ai/summary", {
@@ -244,23 +325,7 @@ export default function AiPage() {
     onError: () => toast.error("Errore durante la generazione del riassunto"),
   });
 
-  // NLP mutation
-  const nlpMutation = useMutation({
-    mutationFn: (text: string) =>
-      fetch("/api/ai/nlp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: selectedModel, text }),
-      }).then((r) => r.json()),
-    onSuccess: (data) => {
-      if (data.error) {
-        toast.error(data.error);
-        return;
-      }
-      setParsedResult(data.parsed);
-    },
-    onError: () => toast.error("Errore durante il parsing"),
-  });
+  // ── Handlers ──────────────────────────────────────────
 
   const handleSendChat = () => {
     if (!chatInput.trim()) return;
@@ -271,50 +336,25 @@ export default function AiPage() {
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
-    chatMutation.mutate({ content: chatInput });
+    executeMutation.mutate(chatInput);
     setChatInput("");
   };
 
-  const handleNlpParse = () => {
-    if (!nlpInput.trim()) return;
-    setParsedResult(null);
-    nlpMutation.mutate(nlpInput);
-  };
+  // ── Render ────────────────────────────────────────────
 
-  const handleNlpConfirm = () => {
-    if (!parsedResult) return;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `nlp-${Date.now()}`,
-        role: "assistant",
-        content: `✅ **Elemento creato con successo!**\n\n- **Titolo:** ${parsedResult.title}\n- **Data:** ${parsedResult.date || "Non specificata"}\n- **Ora:** ${parsedResult.time || "Non specificata"}\n- **Progetto:** ${parsedResult.project || "Nessuno"}\n- **Tipo:** ${parsedResult.type === "event" ? "Evento" : "Task"}\n- **Confidenza:** ${Math.round(parsedResult.confidence * 100)}%`,
-        timestamp: new Date(),
-      },
-    ]);
-    setParsedResult(null);
-    setNlpInput("");
-    toast.success("Elemento creato!");
-  };
-
-  const handleNlpCancel = () => {
-    setParsedResult(null);
-    setNlpInput("");
-    toast.info("Operazione annullata");
-  };
+  const isProcessing = executeMutation.isPending;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI Assistant</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Integrazione Ollama — modello predefinito: gemma4:31b-cloud
+            Parla in linguaggio naturale per creare e gestire task, progetti, eventi
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Model selector */}
           {modelsLoading ? (
             <Skeleton className="h-8 w-48" />
           ) : (
@@ -356,7 +396,7 @@ export default function AiPage() {
         </div>
       </div>
 
-      {/* Ollama non raggiungibile banner */}
+      {/* Ollama offline banner */}
       {!ollamaAvailable && !modelsLoading && (
         <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
@@ -371,407 +411,419 @@ export default function AiPage() {
         </div>
       )}
 
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Card 1: Prioritizza giornata */}
-        <Card size="sm">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-blue-500" />
-              <CardTitle>Prioritizza la mia giornata</CardTitle>
-            </div>
-            <CardDescription>
-              Analizza i task di oggi e li riordina per priorità
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              {Array.isArray(todayTasks) ? todayTasks.length : 0} task da processare
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button
-              size="sm"
-              className="w-full"
-              disabled={!ollamaAvailable || prioritizeMutation.isPending}
-              onClick={() => prioritizeMutation.mutate()}
-            >
-              {prioritizeMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-              ) : (
-                <Brain className="h-3.5 w-3.5 mr-2" />
-              )}
-              {prioritizeMutation.isPending ? "Analisi in corso..." : "Prioritizza"}
-            </Button>
-          </CardFooter>
-        </Card>
-
-        {/* Card 2: Riassunto settimanale */}
-        <Card size="sm">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-green-500" />
-              <CardTitle>Riassunto settimanale</CardTitle>
-            </div>
-            <CardDescription>
-              Genera un resoconto della settimana con progressi e suggerimenti
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              {today.toLocaleDateString("it-IT", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button
-              size="sm"
-              className="w-full"
-              disabled={!ollamaAvailable || summaryMutation.isPending}
-              onClick={() => summaryMutation.mutate()}
-            >
-              {summaryMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-              ) : (
-                <Calendar className="h-3.5 w-3.5 mr-2" />
-              )}
-              {summaryMutation.isPending ? "Generazione..." : "Genera riassunto"}
-            </Button>
-          </CardFooter>
-        </Card>
-
-        {/* Card 3: Creazione rapida NLP */}
-        <Card size="sm">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <MessageSquarePlus className="h-4 w-4 text-purple-500" />
-              <CardTitle>Creazione rapida</CardTitle>
-            </div>
-            <CardDescription>
-              Descrivi in linguaggio naturale cosa devi creare
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              placeholder='es. "riunione con Marco giovedì alle 15"'
-              value={nlpInput}
-              onChange={(e) => setNlpInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleNlpParse();
-                }
-              }}
-              disabled={!ollamaAvailable || nlpMutation.isPending}
-              className="text-sm"
-            />
-
-            {/* Parsed result */}
-            {nlpMutation.isPending && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Analisi in corso...
+      {/* Main two-panel layout */}
+      <div className="flex gap-4">
+        {/* ── LEFT PANEL: Chat ─────────────────────────── */}
+        <div className="flex-1 min-w-0">
+          <Card className="h-[calc(100vh-16rem)] flex flex-col">
+            <CardHeader className="pb-3 shrink-0">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Conversazione</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() =>
+                    setMessages([
+                      {
+                        id: "welcome",
+                        role: "system",
+                        content: "Benvenuto nell'AI Assistant! Scrivi cosa vuoi creare o modificare in linguaggio naturale, oppure usa le azioni rapide a destra.",
+                        timestamp: new Date(),
+                      },
+                    ])
+                  }
+                  disabled={messages.length <= 1}
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Cancella
+                </Button>
               </div>
-            )}
-
-            {parsedResult && (
-              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-                <p className="text-xs font-medium text-foreground">Risultato analisi:</p>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Titolo:</span>
-                    <span className="font-medium">{parsedResult.title}</span>
-                  </div>
-                  {parsedResult.date && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Data:</span>
-                      <span>{parsedResult.date}</span>
-                    </div>
-                  )}
-                  {parsedResult.time && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Ora:</span>
-                      <span>{parsedResult.time}</span>
-                    </div>
-                  )}
-                  {parsedResult.project && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Progetto:</span>
-                      <span>{parsedResult.project}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tipo:</span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[9px] font-mono ${
-                        parsedResult.type === "event"
-                          ? "text-blue-500 bg-blue-500/10 border-blue-500/20"
-                          : "text-purple-500 bg-purple-500/10 border-purple-500/20"
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden p-0 px-6">
+              <ScrollArea className="h-full pr-4">
+                <div className="space-y-3 py-4">
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${
+                        msg.role === "user"
+                          ? "justify-end"
+                          : msg.role === "system"
+                            ? "justify-center"
+                            : "justify-start"
                       }`}
                     >
-                      {parsedResult.type === "event" ? "Evento" : "Task"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Confidenza:</span>
-                    <span>{Math.round(parsedResult.confidence * 100)}%</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="flex-1 h-7 text-xs"
-                    onClick={handleNlpConfirm}
-                  >
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Conferma
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    onClick={handleNlpCancel}
-                  >
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Annulla
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button
-              size="sm"
-              className="w-full"
-              disabled={!ollamaAvailable || !nlpInput.trim() || nlpMutation.isPending}
-              onClick={handleNlpParse}
-              variant="secondary"
-            >
-              {nlpMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5 mr-2" />
-              )}
-              Analizza testo
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-
-      {/* Chat / AI Responses Area */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Conversazione AI</CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() =>
-                setMessages([
-                  {
-                    id: "welcome",
-                    role: "system",
-                    content:
-                      "Benvenuto nell'AI Assistant! Seleziona una funzionalità qui sotto o scrivi un messaggio per chattare con l'assistente.",
-                    timestamp: new Date(),
-                  },
-                ])
-              }
-              disabled={messages.length <= 1}
-            >
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Cancella
-            </Button>
-          </div>
-          <CardDescription>
-            {selectedModel
-              ? `Modello attivo: ${selectedModel}`
-              : "Nessun modello selezionato"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-4">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${
-                    msg.role === "user"
-                      ? "justify-end"
-                      : msg.role === "system"
-                        ? "justify-center"
-                        : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-lg px-4 py-2.5 ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : msg.role === "system"
-                          ? "bg-muted/50 text-muted-foreground text-center text-xs italic"
-                          : "bg-muted text-foreground"
-                    }`}
-                  >
-                    {msg.role !== "system" ? (
-                      <div className="text-sm prose prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 prose-headings:mt-2 prose-headings:mb-1 prose-strong:text-foreground whitespace-pre-wrap">
-                        {renderMarkdown(msg.content)}
+                      <div
+                        className={`max-w-[90%] rounded-lg px-3.5 py-2.5 ${
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : msg.role === "system"
+                              ? "bg-muted/50 text-muted-foreground text-center text-xs italic"
+                              : "bg-muted text-foreground"
+                        }`}
+                      >
+                        {msg.role !== "system" ? (
+                          <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                            <FormattedContent content={msg.content} />
+                          </div>
+                        ) : (
+                          <p>{msg.content}</p>
+                        )}
                       </div>
-                    ) : (
-                      <p>{msg.content}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Loading indicator */}
-              {chatMutation.isPending && (
-                <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-lg px-4 py-3 bg-muted">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      {selectedModel ? `${selectedModel} sta pensando...` : "Elaborazione..."}
                     </div>
-                  </div>
-                </div>
-              )}
+                  ))}
 
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
-        </CardContent>
-        <CardFooter className="border-t">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendChat();
-            }}
-            className="flex w-full gap-2"
-          >
-            <Input
-              placeholder="Scrivi un messaggio all'assistente AI..."
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              disabled={!ollamaAvailable || chatMutation.isPending}
-              className="flex-1"
-            />
-            <Button
-              type="submit"
-              size="sm"
-              disabled={
-                !ollamaAvailable || !chatInput.trim() || chatMutation.isPending
-              }
-            >
-              {chatMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </form>
-        </CardFooter>
-      </Card>
+                  {/* Loading indicator */}
+                  {isProcessing && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[85%] rounded-lg px-4 py-3 bg-muted">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          {selectedModel ? `${selectedModel} sta elaborando...` : "Elaborazione..."}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
+            </CardContent>
+            <CardFooter className="border-t shrink-0 px-6 py-3">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChat();
+                }}
+                className="flex w-full gap-2"
+              >
+                <div className="relative flex-1">
+                  <Input
+                    ref={chatInputRef}
+                    placeholder="Crea un task per il progetto Sito Web con scadenza venerdì..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    disabled={!ollamaAvailable || isProcessing}
+                    className="w-full pr-10"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!ollamaAvailable || !chatInput.trim() || isProcessing}
+                >
+                  {isProcessing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </form>
+            </CardFooter>
+          </Card>
+        </div>
+
+        {/* ── RIGHT PANEL: Quick actions ──────────────── */}
+        <div className="w-64 shrink-0 space-y-3">
+          {/* Prioritize */}
+          <Card size="sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-blue-500" />
+                <CardTitle className="text-sm">Prioritizza giornata</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="pb-2">
+              <p className="text-xs text-muted-foreground">
+                {Array.isArray(todayTasks) ? todayTasks.length : 0} task da processare
+              </p>
+            </CardContent>
+            <CardFooter className="pt-0">
+              <Button
+                size="sm"
+                className="w-full h-7 text-xs"
+                disabled={!ollamaAvailable || prioritizeMutation.isPending}
+                onClick={() => prioritizeMutation.mutate()}
+              >
+                {prioritizeMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                ) : (
+                  <Brain className="h-3 w-3 mr-1.5" />
+                )}
+                {prioritizeMutation.isPending ? "Analisi..." : "Prioritizza"}
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Weekly Summary */}
+          <Card size="sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-green-500" />
+                <CardTitle className="text-sm">Riassunto settimanale</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="pb-2">
+              <p className="text-xs text-muted-foreground">
+                {new Date().toLocaleDateString("it-IT", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </CardContent>
+            <CardFooter className="pt-0">
+              <Button
+                size="sm"
+                className="w-full h-7 text-xs"
+                disabled={!ollamaAvailable || summaryMutation.isPending}
+                onClick={() => summaryMutation.mutate()}
+              >
+                {summaryMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                ) : (
+                  <Calendar className="h-3 w-3 mr-1.5" />
+                )}
+                {summaryMutation.isPending ? "Generazione..." : "Genera"}
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Quick NLP input */}
+          <Card size="sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-purple-500" />
+                <CardTitle className="text-sm">Creazione rapida</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="pb-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const input = (e.target as HTMLFormElement).querySelector("input")?.value;
+                  if (input?.trim()) {
+                    const userMsg: AIMessage = {
+                      id: `user-${Date.now()}`,
+                      role: "user",
+                      content: input,
+                      timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, userMsg]);
+                    executeMutation.mutate(input);
+                    (e.target as HTMLFormElement).querySelector("input")!.value = "";
+                  }
+                }}
+              >
+                <Input
+                  placeholder='es. "riunione domani alle 15"'
+                  disabled={!ollamaAvailable || isProcessing}
+                  className="text-xs h-8"
+                />
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Quick action suggestions */}
+          <Card size="sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Suggerimenti</CardTitle>
+            </CardHeader>
+            <CardContent className="pb-0 space-y-1">
+              {[
+                "Crea un task 'Revisare documentazione' per il progetto Sito Web con scadenza venerdì",
+                "Aggiungi una milestone 'Completamento design' al progetto principale",
+                "Segna come completato il task più urgente di oggi",
+                "Programma una riunione di team domani alle 10 per 1 ora",
+              ].map((suggestion, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="w-full text-left text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded hover:bg-muted/50 line-clamp-2"
+                  onClick={() => {
+                    const userMsg: AIMessage = {
+                      id: `user-${Date.now()}`,
+                      role: "user",
+                      content: suggestion,
+                      timestamp: new Date(),
+                    };
+                    setMessages((prev) => [...prev, userMsg]);
+                    executeMutation.mutate(suggestion);
+                  }}
+                  disabled={!ollamaAvailable || isProcessing}
+                >
+                  💡 {suggestion}
+                </button>
+              ))}
+            </CardContent>
+            <CardFooter className="pt-2" />
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
 
-/** Simple markdown renderer for AI responses */
-function renderMarkdown(content: string) {
-  // Split on code blocks
-  const parts = content.split(/(```[\s\S]*?```)/g);
+// ── Formatted Content ────────────────────────────────────
 
-  return parts.map((part, i) => {
-    // Code blocks
-    if (part.startsWith("```")) {
-      const code = part.replace(/```\w*\n?/g, "").trim();
-      return (
-        <pre
-          key={i}
-          className="bg-background border border-border rounded-md p-3 my-2 overflow-x-auto text-xs font-mono"
-        >
-          <code>{code}</code>
-        </pre>
-      );
-    }
+function FormattedContent({ content }: { content: string }) {
+  // Split on action blocks (lines starting with ✅, ❌, etc.)
+  const sections = content.split(/\n\n+/);
 
-    // Split on lines and render line-by-line with basic markdown
-    const lines = part.split("\n");
-    return (
-      <div key={i} className="space-y-1">
-        {lines.map((line, j) => {
-          if (!line.trim()) return <br key={j} />;
+  return (
+    <>
+      {sections.map((section, i) => {
+        // Check if section contains action blocks
+        if (section.includes("✅") || section.includes("❌") || section.includes("📋") || section.includes("📁")) {
+          return <ActionBlockSection key={i} text={section} />;
+        }
+        // Check if it's a marked-up section with ** **
+        if (section.includes("**") || section.startsWith("##") || section.startsWith("#")) {
+          return <MarkdownSection key={i} text={section} />;
+        }
+        return (
+          <p key={i} className="text-sm leading-relaxed mb-1">
+            {section}
+          </p>
+        );
+      })}
+    </>
+  );
+}
 
-          // Bold text with ** **
-          let rendered = line;
+function MarkdownSection({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-1 my-1">
+      {lines.map((line, j) => {
+        if (!line.trim()) return <br key={j} />;
 
-          // Headers
-          if (line.startsWith("### ")) {
-            return (
-              <p key={j} className="text-sm font-semibold mt-2">
-                {line.replace("### ", "")}
-              </p>
-            );
-          }
-          if (line.startsWith("## ")) {
-            return (
-              <p key={j} className="text-base font-semibold mt-3">
-                {line.replace("## ", "")}
-              </p>
-            );
-          }
-          if (line.startsWith("# ")) {
-            return (
-              <p key={j} className="text-lg font-semibold mt-3">
-                {line.replace("# ", "")}
-              </p>
-            );
-          }
-
-          // List items
-          if (line.match(/^[\d]+\.\s/)) {
-            return (
-              <p key={j} className="text-sm ml-4">
-                {line}
-              </p>
-            );
-          }
-          if (line.startsWith("- ") || line.startsWith("* ")) {
-            return (
-              <p key={j} className="text-sm ml-4">
-                {line}
-              </p>
-            );
-          }
-
-          // Inline code
-          const withInlineCode = line
-            .split(/(`[^`]+`)/g)
-            .map((seg, k) => {
-              if (seg.startsWith("`") && seg.endsWith("`")) {
-                return (
-                  <code
-                    key={k}
-                    className="bg-background px-1 py-0.5 rounded text-[11px] font-mono"
-                  >
-                    {seg.slice(1, -1)}
-                  </code>
-                );
-              }
-              return seg;
-            });
-
+        if (line.startsWith("### ")) {
           return (
-            <p key={j} className="text-sm leading-relaxed">
-              {withInlineCode}
+            <p key={j} className="text-sm font-semibold mt-2">
+              {line.replace("### ", "")}
             </p>
           );
-        })}
-      </div>
-    );
-  });
+        }
+        if (line.startsWith("## ")) {
+          return (
+            <p key={j} className="text-sm font-semibold mt-2">
+              {line.replace("## ", "")}
+            </p>
+          );
+        }
+        if (line.startsWith("# ")) {
+          return (
+            <p key={j} className="text-base font-semibold mt-2">
+              {line.replace("# ", "")}
+            </p>
+          );
+        }
+
+        // Bold segments within line
+        const parts = line.split(/(\*\*[^*]+\*\*)/g);
+        return (
+          <p key={j} className="text-sm leading-relaxed">
+            {parts.map((part, k) => {
+              if (part.startsWith("**") && part.endsWith("**")) {
+                return <strong key={k}>{part.slice(2, -2)}</strong>;
+              }
+              return part;
+            })}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActionBlockSection({ text }: { text: string }) {
+  const lines = text.split("\n").filter(Boolean);
+  return (
+    <div className="space-y-2 my-2">
+      {lines.map((line, i) => {
+        // Detect structured action lines
+        if (line.includes("✅") || line.includes("❌")) {
+          const isSuccess = line.includes("✅");
+          const content = line.replace(/^[✅❌]\s*/, "").trim();
+          return (
+            <div
+              key={i}
+              className={`flex items-start gap-2 rounded-md border p-2.5 ${
+                isSuccess
+                  ? "border-green-500/20 bg-green-500/5"
+                  : "border-red-500/20 bg-red-500/5"
+              }`}
+            >
+              {isSuccess ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              )}
+              <div className="text-sm">{content}</div>
+            </div>
+          );
+        }
+
+        // Project or scadenza line
+        if (line.startsWith("📁") || line.startsWith("⏰") || line.startsWith("📋")) {
+          const content = line.replace(/^[^\s]+\s*/, "").trim();
+          const [label, ...rest] = content.split(":");
+          return (
+            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground pl-1">
+              <span className="text-foreground font-medium">{label}:</span>
+              <span>{rest.join(":").trim()}</span>
+            </div>
+          );
+        }
+
+        // Default: plain line
+        return (
+          <p key={i} className="text-sm">{line}</p>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Format a single action result into display text ─────
+
+function formatActionBlock(action: ActionResult): string {
+  const icon = action.status === "created" || action.status === "completed"
+    ? "✅"
+    : action.status === "error"
+      ? "❌"
+      : "ℹ️";
+  const intentInfo = intentLabels[action.type] || intentLabels.unknown;
+
+  // Build details lines
+  const detailLines: string[] = [];
+  if (action.details.project) {
+    detailLines.push(`📁 Progetto: ${action.details.project}`);
+  }
+  if (action.details.dueDate) {
+    try {
+      detailLines.push(`⏰ Scadenza: ${formatDate(action.details.dueDate as string)}`);
+    } catch {
+      detailLines.push(`⏰ Scadenza: ${action.details.dueDate}`);
+    }
+  }
+  if (action.details.start) {
+    try {
+      detailLines.push(`📅 Inizio: ${formatDate(action.details.start as string)}`);
+    } catch {
+      detailLines.push(`📅 Inizio: ${action.details.start}`);
+    }
+  }
+
+  const errorLine = action.error ? `❌ Errore: ${action.error}` : "";
+
+  return [
+    `${icon} ${intentInfo.label}: "${action.label}"`,
+    ...detailLines,
+    errorLine,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
