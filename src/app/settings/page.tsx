@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "@/components/theme-provider";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -66,6 +67,9 @@ function SettingRow({
 export default function SettingsPage() {
   const { settings, updateSettings } = useSettings();
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   const handleThemeChange = (value: string | null) => {
     if (!value) return;
@@ -88,7 +92,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            {theme === "dark" ? (
+            {mounted && theme === "dark" ? (
               <Moon className="h-4 w-4 text-muted-foreground" />
             ) : (
               <Sun className="h-4 w-4 text-muted-foreground" />

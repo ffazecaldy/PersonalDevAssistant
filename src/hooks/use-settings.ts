@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { z } from "zod";
 
 const STORAGE_KEY = "command-center-settings";
@@ -17,12 +17,13 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 
 function getSnapshot(): Settings {
+  if (typeof window === "undefined") return getServerSnapshot();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return settingsSchema.parse({});
+    if (!raw) return getServerSnapshot();
     return settingsSchema.parse(JSON.parse(raw));
   } catch {
-    return settingsSchema.parse({});
+    return getServerSnapshot();
   }
 }
 
@@ -31,8 +32,12 @@ function subscribe(callback: () => void): () => void {
   return () => window.removeEventListener("storage", callback);
 }
 
+function getServerSnapshot(): Settings {
+  return settingsSchema.parse({});
+}
+
 export function useSettings() {
-  const settings = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const settings = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const updateSettings = useCallback((partial: Partial<Settings>) => {
     const current = getSnapshot();

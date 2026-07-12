@@ -1,12 +1,12 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { EventClickArg, DateSelectArg, DatesSetArg } from "@fullcalendar/core";
+import type { EventClickArg, DateSelectArg, DatesSetArg, ViewMountArg } from "@fullcalendar/core";
 import {
   format,
   parseISO,
@@ -15,6 +15,7 @@ import {
   eachDayOfInterval,
   isSameDay,
 } from "date-fns";
+import { it } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,8 +39,6 @@ import {
   Loader2,
   Calendar as CalendarIcon,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -81,23 +80,6 @@ function toLocalDatetimeString(date: Date): string {
 export default function CalendarPage() {
   const queryClient = useQueryClient();
   const calendarRef = useRef<FullCalendar>(null);
-
-  /* ── Inject FullCalendar CSS ── */
-  useEffect(() => {
-    const links = [
-      "https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.21/main.min.css",
-      "https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.21/main.min.css",
-      "https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.21/main.min.css",
-    ];
-    for (const href of links) {
-      if (!document.querySelector(`link[href="${href}"]`)) {
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = href;
-        document.head.appendChild(link);
-      }
-    }
-  }, []);
 
   /* ── Dialog state ── */
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -258,6 +240,12 @@ export default function CalendarPage() {
     });
   }, []);
 
+  const handleViewDidMount = useCallback((arg: ViewMountArg) => {
+    if (process.env.NODE_ENV === "development") {
+      console.info("[Calendar] View mounted:", arg.view.type);
+    }
+  }, []);
+
   const handleDateSelect = useCallback((arg: DateSelectArg) => {
     setDialogMode("create");
     setSelectedEventId(null);
@@ -358,7 +346,7 @@ export default function CalendarPage() {
       );
       return {
         date: day,
-        label: format(day, "EEE", { locale: undefined }),
+        label: format(day, "EEE", { locale: it }),
         dayNum: format(day, "d"),
         totalMinutes,
         tasks: dayTasks,
@@ -437,6 +425,7 @@ export default function CalendarPage() {
               height="auto"
               events={calendarEvents}
               datesSet={handleDatesSet}
+              viewDidMount={handleViewDidMount}
               select={handleDateSelect}
               eventClick={handleEventClick}
               eventContent={renderEventContent}
@@ -701,6 +690,9 @@ export default function CalendarPage() {
       {/* ── FullCalendar Dark Theme Overrides ── */}
       <style jsx global>{`
         .calendar-container {
+          width: 100%;
+          max-width: 100%;
+          overflow: hidden;
           --fc-border-color: var(--border);
           --fc-button-text-color: var(--foreground);
           --fc-button-bg-color: var(--secondary);
@@ -746,6 +738,27 @@ export default function CalendarPage() {
           background-color: var(--primary);
           color: var(--primary-foreground);
           border-color: var(--primary);
+        }
+
+        /* ── Dark‑theme overrides for FullCalendar toolbar/buttons ── */
+        .dark .calendar-container .fc-toolbar {
+          gap: 0.5rem;
+        }
+        .dark .calendar-container .fc-button-primary {
+          background-color: var(--secondary);
+          border-color: var(--border);
+          color: var(--foreground);
+        }
+        .dark .calendar-container .fc-button-primary:hover {
+          background-color: var(--accent);
+          border-color: var(--border);
+          color: var(--accent-foreground);
+        }
+        .dark .calendar-container .fc-button-primary:disabled {
+          opacity: 0.4;
+        }
+        .dark .calendar-container .fc-toolbar-title {
+          color: var(--foreground);
         }
 
         .calendar-container .fc-col-header-cell {
