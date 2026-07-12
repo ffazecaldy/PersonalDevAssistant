@@ -29,12 +29,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="it" className="dark" suppressHydrationWarning>
-      <head>
-        {/* FullCalendar CSS – pre-loaded so FP doesn't FOUC */}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.21/main.min.css" />
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.21/main.min.css" />
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fullcalendar/timegrid@6.1.21/main.min.css" />
-      </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-background text-foreground`}>
         <Providers>
           <div className="flex h-screen overflow-hidden">

@@ -92,10 +92,14 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            {mounted && theme === "dark" ? (
-              <Moon className="h-4 w-4 text-muted-foreground" />
+            {mounted ? (
+              theme === "dark" ? (
+                <Moon className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <Sun className="h-4 w-4 text-muted-foreground" />
+              )
             ) : (
-              <Sun className="h-4 w-4 text-muted-foreground" />
+              <div className="h-4 w-4" />
             )}
             <CardTitle className="text-base">Aspetto</CardTitle>
           </div>

@@ -37,9 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Loader2,
-  Calendar as CalendarIcon,
   Clock,
-  Plus,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -403,11 +401,13 @@ export default function CalendarPage() {
 
       {/* ── Calendar ── */}
       <div className="calendar-container">
-        {isLoading && calendarEvents.length === 0 ? (
-          <Skeleton className="h-[600px] w-full rounded-xl" />
-        ) : (
-          <div className="border rounded-xl overflow-hidden bg-card">
-            <FullCalendar
+        <div className="border rounded-xl overflow-hidden bg-card">
+          {isLoading && calendarEvents.length === 0 && (
+            <div className="flex items-center justify-center h-[600px]">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          <FullCalendar
               ref={calendarRef}
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
               headerToolbar={{
@@ -445,8 +445,7 @@ export default function CalendarPage() {
               droppable={false}
             />
           </div>
-        )}
-      </div>
+        </div>
 
       {/* ── Carico Settimanale ── */}
       <Card>
