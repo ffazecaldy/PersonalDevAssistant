@@ -35,7 +35,9 @@ export default function TasksPage() {
     description: "",
     priority: "MEDIUM",
     status: "TODO",
+    projectId: "",
   });
+  const [formError, setFormError] = useState<string | null>(null);
 
   const queryParams = new URLSearchParams();
   if (filters.projectId) queryParams.set("projectId", filters.projectId);
@@ -64,7 +66,8 @@ export default function TasksPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setOpen(false);
-      setForm({ title: "", description: "", priority: "MEDIUM", status: "TODO" });
+      setForm({ title: "", description: "", priority: "MEDIUM", status: "TODO", projectId: "" });
+      setFormError(null);
       toast.success("Task creato");
     },
     onError: () => toast.error("Errore nella creazione"),
@@ -95,7 +98,13 @@ export default function TasksPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!form.title.trim()) return;
+    if (!form.projectId) {
+      setFormError("Seleziona un progetto");
+      toast.error("Seleziona un progetto");
+      return;
+    }
     createMutation.mutate(form);
   };
 
@@ -169,38 +178,61 @@ export default function TasksPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
               />
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block font-medium">
+                  Progetto <span className="text-red-500">*</span>
+                </label>
+                <div>
+                  <Select
+                    value={form.projectId || ""}
+                    onValueChange={(v: string | null) => {
+                      setForm({ ...form, projectId: v || "" });
+                      setFormError(null);
+                    }}
+                  >
+                    <SelectTrigger className={formError ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Progetto *" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(projects || []).map((p: Project) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formError && (
+                    <p className="text-[11px] text-red-500 mt-1">{formError}</p>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
-                <Select
-                  value={form.priority}
-                  onValueChange={(v: string | null) =>
-                    setForm({ ...form, priority: (v as TaskFormData["priority"]) || "MEDIUM" })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LOW">Low</SelectItem>
-                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                    <SelectItem value="HIGH">High</SelectItem>
-                    <SelectItem value="URGENT">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={form.projectId || ""}
-                  onValueChange={(v: string | null) => setForm({ ...form, projectId: v || undefined })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Progetto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(projects || []).map((p: Project) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Priorità</label>
+                  <Select
+                    value={form.priority}
+                    onValueChange={(v: string | null) =>
+                      setForm({ ...form, priority: (v as TaskFormData["priority"]) || "MEDIUM" })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOW">Low</SelectItem>
+                      <SelectItem value="MEDIUM">Medium</SelectItem>
+                      <SelectItem value="HIGH">High</SelectItem>
+                      <SelectItem value="URGENT">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Scadenza</label>
+                  <Input
+                    type="date"
+                    onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -243,7 +275,7 @@ export default function TasksPage() {
                   Importante
                 </Button>
               </div>
-              <Button type="submit" className="w-full" disabled={!form.title.trim()}>
+              <Button type="submit" className="w-full" disabled={!form.title.trim() || !form.projectId}>
                 Crea Task
               </Button>
             </form>
@@ -411,10 +443,18 @@ export default function TasksPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
-                  {task.project && (
-                    <span className="text-[10px] text-muted-foreground font-mono">
+                  {task.project ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: task.project.color || "#888" }}
+                      />
                       {task.project.name}
                     </span>
+                  ) : (
+                    <Badge variant="outline" className="text-[9px] font-mono text-red-500 border-red-500/30 bg-red-500/5">
+                      NESSUN PROGETTO
+                    </Badge>
                   )}
                   {task.dueDate && (
                     <span className="text-[10px] text-muted-foreground font-mono">

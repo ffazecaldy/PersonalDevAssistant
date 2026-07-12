@@ -71,6 +71,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!projectId || typeof projectId !== "string") {
+      return NextResponse.json(
+        { error: "Project is required" },
+        { status: 400 }
+      );
+    }
+
     const task = await prisma.task.create({
       data: {
         title,
@@ -83,7 +90,7 @@ export async function POST(req: NextRequest) {
         dueDate: dueDate ? new Date(dueDate) : null,
         scheduledStart: scheduledStart ? new Date(scheduledStart) : null,
         scheduledEnd: scheduledEnd ? new Date(scheduledEnd) : null,
-        projectId: projectId || null,
+        projectId,
         parentTaskId: parentTaskId || null,
       },
       include: {

@@ -65,7 +65,15 @@ export async function PATCH(
       data.scheduledStart = scheduledStart ? new Date(scheduledStart) : null;
     if (scheduledEnd !== undefined)
       data.scheduledEnd = scheduledEnd ? new Date(scheduledEnd) : null;
-    if (projectId !== undefined) data.projectId = projectId || null;
+    if (projectId !== undefined) {
+      if (projectId === null || projectId === "") {
+        return NextResponse.json(
+          { error: "ProjectId cannot be empty" },
+          { status: 400 }
+        );
+      }
+      data.projectId = projectId;
+    }
     if (parentTaskId !== undefined) data.parentTaskId = parentTaskId || null;
 
     if (status === "DONE") data.completedAt = new Date();

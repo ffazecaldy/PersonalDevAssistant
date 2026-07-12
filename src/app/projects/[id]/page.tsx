@@ -281,7 +281,7 @@ export default function ProjectDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {tasksByStatus[status].slice(0, 5).map((task: Task) => (
+              {tasksByStatus[status].slice(0, 5).map((task: Task & { project?: { id: string; name: string; color: string } }) => (
                 <div
                   key={task.id}
                   className="p-2 rounded-md bg-muted/30 border border-border/50 text-xs"
@@ -295,11 +295,22 @@ export default function ProjectDetailPage() {
                       {task.priority}
                     </Badge>
                   </div>
-                  {task.dueDate && (
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {formatDate(task.dueDate)}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 mt-1">
+                    {task.project && (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: task.project.color || '#888' }}
+                        />
+                        {task.project.name}
+                      </span>
+                    )}
+                    {task.dueDate && (
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {formatDate(task.dueDate)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
               {tasksByStatus[status].length === 0 && (

@@ -345,9 +345,9 @@ export default function AiPage() {
   const isProcessing = executeMutation.isPending;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI Assistant</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -398,7 +398,7 @@ export default function AiPage() {
 
       {/* Ollama offline banner */}
       {!ollamaAvailable && !modelsLoading && (
-        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-start gap-3">
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-start gap-3 shrink-0">
           <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-yellow-500">Ollama non raggiungibile</p>
@@ -412,10 +412,10 @@ export default function AiPage() {
       )}
 
       {/* Main two-panel layout */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-1 min-h-0">
         {/* ── LEFT PANEL: Chat ─────────────────────────── */}
-        <div className="flex-1 min-w-0">
-          <Card className="h-[calc(100vh-16rem)] flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
+          <Card className="flex-1 min-h-0 flex flex-col">
             <CardHeader className="pb-3 shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Conversazione</CardTitle>
@@ -440,7 +440,7 @@ export default function AiPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-0 px-6">
+            <CardContent className="flex-1 overflow-hidden p-4">
               <ScrollArea className="h-full pr-4">
                 <div className="space-y-3 py-4">
                   {messages.map((msg) => (
@@ -455,7 +455,7 @@ export default function AiPage() {
                       }`}
                     >
                       <div
-                        className={`max-w-[90%] rounded-lg px-3.5 py-2.5 ${
+                        className={`max-w-[85%] lg:max-w-[75%] rounded-lg px-3.5 py-2.5 ${
                           msg.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : msg.role === "system"
@@ -464,11 +464,11 @@ export default function AiPage() {
                         }`}
                       >
                         {msg.role !== "system" ? (
-                          <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                          <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                             <FormattedContent content={msg.content} />
                           </div>
                         ) : (
-                          <p>{msg.content}</p>
+                          <p className="text-xs">{msg.content}</p>
                         )}
                       </div>
                     </div>
@@ -477,10 +477,10 @@ export default function AiPage() {
                   {/* Loading indicator */}
                   {isProcessing && (
                     <div className="flex justify-start">
-                      <div className="max-w-[85%] rounded-lg px-4 py-3 bg-muted">
+                      <div className="rounded-lg px-3.5 py-2 bg-muted/60">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          {selectedModel ? `${selectedModel} sta elaborando...` : "Elaborazione..."}
+                          <span className="text-xs">{selectedModel ? `${selectedModel} sta elaborando...` : "Elaborazione..."}</span>
                         </div>
                       </div>
                     </div>
@@ -490,7 +490,7 @@ export default function AiPage() {
                 </div>
               </ScrollArea>
             </CardContent>
-            <CardFooter className="border-t shrink-0 px-6 py-3">
+            <CardFooter className="shrink-0 border-t px-4 py-3">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -525,7 +525,7 @@ export default function AiPage() {
         </div>
 
         {/* ── RIGHT PANEL: Quick actions ──────────────── */}
-        <div className="w-64 shrink-0 space-y-3">
+        <div className="w-56 shrink-0 space-y-3 overflow-y-auto">
           {/* Prioritize */}
           <Card size="sm">
             <CardHeader className="pb-2">
@@ -668,61 +668,68 @@ export default function AiPage() {
 // ── Formatted Content ────────────────────────────────────
 
 function FormattedContent({ content }: { content: string }) {
-  // Split on action blocks (lines starting with ✅, ❌, etc.)
   const sections = content.split(/\n\n+/);
 
   return (
-    <>
+    <div className="space-y-2">
       {sections.map((section, i) => {
-        // Check if section contains action blocks
-        if (section.includes("✅") || section.includes("❌") || section.includes("📋") || section.includes("📁")) {
-          return <ActionBlockSection key={i} text={section} />;
+        const trimmed = section.trim();
+        if (!trimmed) return null;
+
+        // Action blocks — lines starting with ✅ or ❌
+        if (/^[✅❌]/.test(trimmed)) {
+          return <ActionBlockSection key={i} text={trimmed} />;
         }
-        // Check if it's a marked-up section with ** **
-        if (section.includes("**") || section.startsWith("##") || section.startsWith("#")) {
-          return <MarkdownSection key={i} text={section} />;
+
+        // Markdown / headings / bold
+        if (trimmed.includes("**") || trimmed.startsWith("#") || trimmed.startsWith("##") || trimmed.startsWith("###")) {
+          return <MarkdownSection key={i} text={trimmed} />;
         }
+
+        // Plain paragraph
         return (
-          <p key={i} className="text-sm leading-relaxed mb-1">
-            {section}
+          <p key={i} className="text-sm leading-relaxed">
+            {trimmed}
           </p>
         );
       })}
-    </>
+    </div>
   );
 }
 
 function MarkdownSection({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <div className="space-y-1 my-1">
+    <div className="space-y-1">
       {lines.map((line, j) => {
-        if (!line.trim()) return <br key={j} />;
+        const trimmed = line.trim();
+        if (!trimmed) return <br key={j} />;
 
-        if (line.startsWith("### ")) {
+        // Headings
+        if (trimmed.startsWith("### ")) {
           return (
-            <p key={j} className="text-sm font-semibold mt-2">
-              {line.replace("### ", "")}
+            <p key={j} className="text-sm font-semibold mt-2 text-foreground/90">
+              {trimmed.replace(/^###\s+/, "")}
             </p>
           );
         }
-        if (line.startsWith("## ")) {
+        if (trimmed.startsWith("## ")) {
           return (
-            <p key={j} className="text-sm font-semibold mt-2">
-              {line.replace("## ", "")}
+            <p key={j} className="text-sm font-semibold mt-2 text-foreground/90">
+              {trimmed.replace(/^##\s+/, "")}
             </p>
           );
         }
-        if (line.startsWith("# ")) {
+        if (trimmed.startsWith("# ")) {
           return (
-            <p key={j} className="text-base font-semibold mt-2">
-              {line.replace("# ", "")}
+            <p key={j} className="text-base font-semibold mt-2 text-foreground">
+              {trimmed.replace(/^#\s+/, "")}
             </p>
           );
         }
 
         // Bold segments within line
-        const parts = line.split(/(\*\*[^*]+\*\*)/g);
+        const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
         return (
           <p key={j} className="text-sm leading-relaxed">
             {parts.map((part, k) => {
@@ -740,49 +747,69 @@ function MarkdownSection({ text }: { text: string }) {
 
 function ActionBlockSection({ text }: { text: string }) {
   const lines = text.split("\n").filter(Boolean);
+
+  // First line is the action header (✅ or ❌)
+  const headerLine = lines[0] || "";
+  const isSuccess = headerLine.includes("✅");
+  const detailLines = lines.slice(1).filter((l) => l.trim());
+
+  // Parse the header: "✅ Azione: \"label\""
+  const headerText = headerLine.replace(/^[✅❌]\s*/, "").trim();
+  const [actionLabel, ...labelRest] = headerText.split(":");
+  const actionValue = labelRest.join(":").trim().replace(/^"/, "").replace(/"$/, "");
+
+  // Parse details
+  const details = detailLines.map((line) => {
+    const cleaned = line.replace(/^[📁⏰📅❌]\s*/, "").trim();
+    const [label, ...rest] = cleaned.split(":");
+    return {
+      label: label.trim(),
+      value: rest.join(":").trim(),
+    };
+  });
+
+  const hasError = detailLines.some((l) => l.includes("❌"));
+
   return (
-    <div className="space-y-2 my-2">
-      {lines.map((line, i) => {
-        // Detect structured action lines
-        if (line.includes("✅") || line.includes("❌")) {
-          const isSuccess = line.includes("✅");
-          const content = line.replace(/^[✅❌]\s*/, "").trim();
-          return (
-            <div
-              key={i}
-              className={`flex items-start gap-2 rounded-md border p-2.5 ${
-                isSuccess
-                  ? "border-green-500/20 bg-green-500/5"
-                  : "border-red-500/20 bg-red-500/5"
-              }`}
-            >
-              {isSuccess ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-              )}
-              <div className="text-sm">{content}</div>
-            </div>
-          );
-        }
+    <div
+      className={`rounded-lg border p-3 space-y-2 ${
+        isSuccess
+          ? "border-green-500/20 bg-green-500/5"
+          : hasError
+            ? "border-red-500/20 bg-red-500/5"
+            : "border-muted bg-muted/30"
+      }`}
+    >
+      {/* Header row */}
+      <div className="flex items-start gap-2.5">
+        {isSuccess ? (
+          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+        ) : (
+          <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-snug">
+            {actionLabel}
+            {actionValue && (
+              <span className="text-muted-foreground font-normal">
+                {" "}&quot;{actionValue}&quot;
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
 
-        // Project or scadenza line
-        if (line.startsWith("📁") || line.startsWith("⏰") || line.startsWith("📋")) {
-          const content = line.replace(/^[^\s]+\s*/, "").trim();
-          const [label, ...rest] = content.split(":");
-          return (
-            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground pl-1">
-              <span className="text-foreground font-medium">{label}:</span>
-              <span>{rest.join(":").trim()}</span>
+      {/* Detail rows */}
+      {details.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-7">
+          {details.map((d, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground/70">{d.label}:</span>
+              <span>{d.value}</span>
             </div>
-          );
-        }
-
-        // Default: plain line
-        return (
-          <p key={i} className="text-sm">{line}</p>
-        );
-      })}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -790,12 +817,13 @@ function ActionBlockSection({ text }: { text: string }) {
 // ── Format a single action result into display text ─────
 
 function formatActionBlock(action: ActionResult): string {
+  const intentInfo = intentLabels[action.type] || intentLabels.unknown;
+
   const icon = action.status === "created" || action.status === "completed"
     ? "✅"
     : action.status === "error"
       ? "❌"
       : "ℹ️";
-  const intentInfo = intentLabels[action.type] || intentLabels.unknown;
 
   // Build details lines
   const detailLines: string[] = [];

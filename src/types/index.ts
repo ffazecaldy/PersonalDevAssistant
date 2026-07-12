@@ -28,7 +28,7 @@ export type TaskFormData = {
   dueDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
-  projectId?: string;
+  projectId: string;
   parentTaskId?: string;
 };
 

@@ -173,13 +173,24 @@ export default function DashboardPage() {
             ) : todayTasks.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nessun task in scadenza oggi</p>
             ) : (
-              todayTasks.slice(0, 5).map((task: Task) => (
+              todayTasks.slice(0, 5).map((task: Task & { project?: { id: string; name: string; color: string } }) => (
                 <Link
                   key={task.id}
                   href={"/tasks"}
                   className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 transition-colors"
                 >
-                  <span className="text-sm truncate">{task.title}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm truncate block">{task.title}</span>
+                    {task.project && (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono mt-0.5">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: task.project.color || '#888' }}
+                        />
+                        {task.project.name}
+                      </span>
+                    )}
+                  </div>
                   <Badge variant="outline" className={`text-[10px] font-mono border-none ${getPriorityColor(task.priority)}`}>
                     {task.priority}
                   </Badge>
@@ -201,7 +212,7 @@ export default function DashboardPage() {
             ) : overdueTasks.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nessun task in ritardo</p>
             ) : (
-              overdueTasks.slice(0, 5).map((task: Task) => (
+              overdueTasks.slice(0, 5).map((task: Task & { project?: { id: string; name: string; color: string } }) => (
                 <Link
                   key={task.id}
                   href={"/tasks"}
@@ -209,9 +220,22 @@ export default function DashboardPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <span className="text-sm truncate block">{task.title}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {task.dueDate ? formatDate(task.dueDate) : ""}
-                    </span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {task.project && (
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: task.project.color || '#888' }}
+                          />
+                          {task.project.name}
+                        </span>
+                      )}
+                      {task.dueDate && (
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {formatDate(task.dueDate)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Badge variant="outline" className={`text-[10px] font-mono border-none ${getPriorityColor(task.priority)}`}>
                     {task.priority}
@@ -267,13 +291,24 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {urgentImportant.slice(0, 6).map((task: Task) => (
+              {urgentImportant.slice(0, 6).map((task: Task & { project?: { id: string; name: string; color: string } }) => (
                 <Link
                   key={task.id}
                   href={"/tasks"}
                   className="flex items-center justify-between p-2 rounded-md bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors"
                 >
-                  <span className="text-sm truncate">{task.title}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm truncate block">{task.title}</span>
+                    {task.project && (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono mt-0.5">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: task.project.color || '#888' }}
+                        />
+                        {task.project.name}
+                      </span>
+                    )}
+                  </div>
                   <Badge variant="outline" className={`text-[10px] font-mono border-none ${getPriorityColor(task.priority)}`}>
                     {task.priority}
                   </Badge>
