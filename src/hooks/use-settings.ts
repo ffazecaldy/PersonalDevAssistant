@@ -16,12 +16,20 @@ export const settingsSchema = z.object({
 
 export type Settings = z.infer<typeof settingsSchema>;
 
+let cachedSettings: Settings | null = null;
+
 function getSnapshot(): Settings {
   if (typeof window === "undefined") return getServerSnapshot();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return getServerSnapshot();
-    return settingsSchema.parse(JSON.parse(raw));
+    const parsed = settingsSchema.parse(JSON.parse(raw));
+    // Return cached reference if value hasn't changed (prevents infinite loop)
+    if (cachedSettings && JSON.stringify(cachedSettings) === JSON.stringify(parsed)) {
+      return cachedSettings;
+    }
+    cachedSettings = parsed;
+    return parsed;
   } catch {
     return getServerSnapshot();
   }
@@ -32,8 +40,13 @@ function subscribe(callback: () => void): () => void {
   return () => window.removeEventListener("storage", callback);
 }
 
+let cachedServerSettings: Settings | null = null;
+
 function getServerSnapshot(): Settings {
-  return settingsSchema.parse({});
+  if (!cachedServerSettings) {
+    cachedServerSettings = settingsSchema.parse({});
+  }
+  return cachedServerSettings;
 }
 
 export function useSettings() {

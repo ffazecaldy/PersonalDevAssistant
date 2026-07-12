@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,12 +75,10 @@ function getQuadrantKey(urgent: boolean, important: boolean): QuadrantKey {
 }
 
 // ─── Draggable Task Card ───────────────────────────────────────────
-function TaskCard({
+const TaskCard = memo(function TaskCard({
   task,
-  projectName,
 }: {
-  task: Task;
-  projectName?: string;
+  task: Task & { project?: { id: string; name: string; color: string } };
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
@@ -125,8 +123,16 @@ function TaskCard({
           </Badge>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          {projectName && (
-            <span className="font-mono truncate">{projectName}</span>
+          {task.project ? (
+            <span className="flex items-center gap-1 font-mono truncate">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: task.project.color || '#888' }}
+              />
+              {task.project.name}
+            </span>
+          ) : (
+            <span className="font-mono text-muted-foreground/50 italic">Nessun progetto</span>
           )}
           {task.dueDate && (
             <span className="font-mono whitespace-nowrap">{formatDate(task.dueDate)}</span>
@@ -135,19 +141,17 @@ function TaskCard({
       </div>
     </div>
   );
-}
+});
 
 // ─── Droppable Quadrant ────────────────────────────────────────────
-function Quadrant({
+const Quadrant = memo(function Quadrant({
   quadKey,
   tasks,
-  projectMap,
   onStatusToggle,
   onTaskClick,
 }: {
   quadKey: QuadrantKey;
   tasks: Task[];
-  projectMap: Record<string, string>;
   onStatusToggle: (task: Task) => void;
   onTaskClick: (task: Task) => void;
 }) {
@@ -159,7 +163,7 @@ function Quadrant({
       ref={setNodeRef}
       className={`flex flex-col rounded-lg border ${q.borderColor} ${q.bgColor} ${
         isOver ? "ring-2 ring-primary/40 shadow-lg" : ""
-      } transition-all min-h-[260px]`}
+      } transition-all min-h-[300px]`}
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
         <div className="flex items-center gap-2">
@@ -173,13 +177,13 @@ function Quadrant({
       </div>
       <div className="flex-1 p-2 space-y-1.5 overflow-y-auto max-h-[400px]">
         {tasks.length === 0 && (
-          <div className="flex items-center justify-center h-24 text-[10px] text-muted-foreground/50 italic">
-            Trascina un task qui
+          <div className="flex items-center justify-center h-32 text-[10px] text-muted-foreground/50 italic border-2 border-dashed border-muted-foreground/20 rounded-lg mx-2 my-4">
+            Drop here
           </div>
         )}
         {tasks.map((task) => (
           <div key={task.id} className="group relative" onClick={() => onTaskClick(task)}>
-            <TaskCard task={task} projectName={projectMap[task.projectId ?? ""]} />
+            <TaskCard task={task} />
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -208,10 +212,10 @@ function Quadrant({
       </div>
     </div>
   );
-}
+});
 
 // ─── Drag Overlay Card ─────────────────────────────────────────────
-function DragOverlayCard({ task, projectName }: { task: Task; projectName?: string }) {
+function DragOverlayCard({ task }: { task: Task & { project?: { id: string; name: string; color: string } } }) {
   return (
     <div className="flex items-start gap-2 p-2.5 rounded-md border-2 border-primary bg-card shadow-xl text-xs max-w-[260px]">
       <div className="mt-0.5 text-muted-foreground">
@@ -228,7 +232,17 @@ function DragOverlayCard({ task, projectName }: { task: Task; projectName?: stri
           </Badge>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          {projectName && <span className="font-mono truncate">{projectName}</span>}
+          {task.project ? (
+            <span className="flex items-center gap-1 font-mono truncate">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: task.project.color || '#888' }}
+              />
+              {task.project.name}
+            </span>
+          ) : (
+            <span className="font-mono text-muted-foreground/50 italic">Nessun progetto</span>
+          )}
           {task.dueDate && (
             <span className="font-mono whitespace-nowrap">{formatDate(task.dueDate)}</span>
           )}
@@ -246,7 +260,7 @@ function QuickEditDialog({
   onSave,
   projects,
 }: {
-  task: Task | null;
+  task: (Task & { project?: { id: string; name: string; color: string } }) | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (id: string, data: Partial<Task>) => void;
@@ -417,15 +431,6 @@ export default function EisenhowerPage() {
     queryFn: () => fetch("/api/projects").then((r) => r.json()),
   });
 
-  // Build project name map
-  const projectMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    (projects ?? []).forEach((p: Project) => {
-      map[p.id] = p.name;
-    });
-    return map;
-  }, [projects]);
-
   // Categorize tasks into quadrants
   const { q1, q2, q3, q4 } = useMemo(() => {
     const q = { q1: [] as Task[], q2: [] as Task[], q3: [] as Task[], q4: [] as Task[] };
@@ -439,38 +444,6 @@ export default function EisenhowerPage() {
   // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
-  // Drag start
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    const task = event.active.data.current as Task;
-    if (task) setActiveDragTask(task);
-  }, []);
-
-  // Drag end — update quadrant assignment
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setActiveDragTask(null);
-      const { active, over } = event;
-      if (!over || !active) return;
-
-      const task = active.data.current as Task;
-      const targetQuadrant = over.id as QuadrantKey;
-      if (!task || !QUADRANTS[targetQuadrant]) return;
-
-      const currentQuadrant = getQuadrantKey(task.urgent, task.important);
-      if (currentQuadrant === targetQuadrant) return;
-
-      // Determine new urgent/important values
-      const q = QUADRANTS[targetQuadrant];
-
-      updateQuadrantMutation.mutate({
-        id: task.id,
-        urgent: q.urgent,
-        important: q.important,
-      });
-    },
-    []
   );
 
   // Update quadrant mutation
@@ -517,6 +490,38 @@ export default function EisenhowerPage() {
     },
     onError: () => toast.error("Errore nell'aggiornamento"),
   });
+
+  // Drag start
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const task = event.active.data.current as Task;
+    if (task) setActiveDragTask(task);
+  }, []);
+
+  // Drag end — update quadrant assignment
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveDragTask(null);
+      const { active, over } = event;
+      if (!over || !active) return;
+
+      const task = active.data.current as Task;
+      const targetQuadrant = over.id as QuadrantKey;
+      if (!task || !QUADRANTS[targetQuadrant]) return;
+
+      const currentQuadrant = getQuadrantKey(task.urgent, task.important);
+      if (currentQuadrant === targetQuadrant) return;
+
+      // Determine new urgent/important values
+      const q = QUADRANTS[targetQuadrant];
+
+      updateQuadrantMutation.mutate({
+        id: task.id,
+        urgent: q.urgent,
+        important: q.important,
+      });
+    },
+    [updateQuadrantMutation]
+  );
 
   // Status cycle: TODO → IN_PROGRESS → DONE → TODO
   const handleStatusToggle = useCallback(
@@ -659,28 +664,24 @@ export default function EisenhowerPage() {
             <Quadrant
               quadKey="q1"
               tasks={q1}
-              projectMap={projectMap}
               onStatusToggle={handleStatusToggle}
               onTaskClick={handleTaskClick}
             />
             <Quadrant
               quadKey="q2"
               tasks={q2}
-              projectMap={projectMap}
               onStatusToggle={handleStatusToggle}
               onTaskClick={handleTaskClick}
             />
             <Quadrant
               quadKey="q3"
               tasks={q3}
-              projectMap={projectMap}
               onStatusToggle={handleStatusToggle}
               onTaskClick={handleTaskClick}
             />
             <Quadrant
               quadKey="q4"
               tasks={q4}
-              projectMap={projectMap}
               onStatusToggle={handleStatusToggle}
               onTaskClick={handleTaskClick}
             />
@@ -688,10 +689,7 @@ export default function EisenhowerPage() {
 
           <DragOverlay>
             {activeDragTask ? (
-              <DragOverlayCard
-                task={activeDragTask}
-                projectName={projectMap[activeDragTask.projectId ?? ""]}
-              />
+              <DragOverlayCard task={activeDragTask} />
             ) : null}
           </DragOverlay>
         </DndContext>
