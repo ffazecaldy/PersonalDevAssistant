@@ -2,13 +2,16 @@
 
 import { Button } from "@/components/ui/button";
 import { Search, Sun, Moon } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useState } from "react";
+import { useTheme } from "@/components/theme-provider";
+import { useState, useEffect } from "react";
 import { CommandPalette } from "@/components/layout/command-palette";
 
 export function Topbar() {
   const { theme, setTheme } = useTheme();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   return (
     <>
@@ -36,10 +39,14 @@ export function Topbar() {
           className="h-8 w-8"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         >
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4" />
+          {mounted ? (
+            theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )
           ) : (
-            <Moon className="h-4 w-4" />
+            <div className="h-4 w-4" />
           )}
         </Button>
       </header>
