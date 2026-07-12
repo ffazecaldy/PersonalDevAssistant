@@ -103,7 +103,11 @@ export default function ProjectDetailPage() {
   }
 
   if (!project) {
-    return <div>Progetto non trovato</div>;
+    return <div className="text-center py-12 text-sm text-muted-foreground">Progetto non trovato</div>;
+  }
+
+  if (project.error) {
+    return <div className="text-center py-12 text-sm text-destructive">Errore: {project.error}</div>;
   }
 
   const tasksByStatus = {
