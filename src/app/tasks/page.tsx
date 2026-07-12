@@ -191,7 +191,14 @@ export default function TasksPage() {
                     }}
                   >
                     <SelectTrigger className={formError ? "border-red-500" : ""}>
-                      <SelectValue placeholder="Progetto *" />
+                      <SelectValue>
+                        {form.projectId
+                          ? (() => {
+                              const p = (projects || []).find((p: Project) => p.id === form.projectId);
+                              return p ? p.name : form.projectId;
+                            })()
+                          : "Progetto *"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {(projects || []).map((p: Project) => (
@@ -336,7 +343,14 @@ export default function TasksPage() {
           }
         >
           <SelectTrigger className="w-[150px] h-9">
-            <SelectValue placeholder="Progetto" />
+            <SelectValue>
+              {filters.projectId
+                ? (() => {
+                    const p = (projects || []).find((p: Project) => p.id === filters.projectId);
+                    return p ? p.name : filters.projectId;
+                  })()
+                : "Progetto"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(projects || []).map((p: Project) => (
