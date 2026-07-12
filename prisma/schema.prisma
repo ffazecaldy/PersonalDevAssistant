@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  color       String?
+  deadline    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  tasks       Task[]
+  milestones  Milestone[]
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+model Milestone {
+  id        String   @id @default(cuid())
+  title     String
+  dueDate   DateTime?
+  done      Boolean  @default(false)
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+}
+
+model Task {
+  id               String    @id @default(cuid())
+  title            String
+  description      String?
+  priority         Priority  @default(MEDIUM)
+  urgent           Boolean   @default(false)
+  important        Boolean   @default(false)
+  status           TaskStatus @default(TODO)
+  estimatedMinutes Int?
+  dueDate          DateTime?
+  scheduledStart   DateTime?
+  scheduledEnd     DateTime?
+  isArchived       Boolean   @default(false)
+  project          Project?  @relation(fields: [projectId], references: [id])
+  projectId        String?
+  parentTask       Task?     @relation("SubTasks", fields: [parentTaskId], references: [id])
+  parentTaskId     String?
+  subTasks         Task[]    @relation("SubTasks")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime?
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+model CalendarEvent {
+  id              String    @id @default(cuid())
+  title           String
+  start           DateTime
+  end             DateTime
+  allDay          Boolean   @default(false)
+  type            EventType @default(EVENT)
+  linkedTaskId    String?
+  linkedProjectId String?
+  recurrence      String?
+  notes           String?
+}
+
+enum EventType {
+  EVENT
+  TASK_BLOCK
+}
