@@ -331,7 +331,14 @@ function QuickEditDialog({
                 onValueChange={(v: string | null) => setForm({ ...form, projectId: v || null })}
               >
                 <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Nessuno" />
+                  <SelectValue>
+                    {form.projectId
+                      ? (() => {
+                          const p = projects.find((p: any) => p.id === form.projectId);
+                          return p ? p.name : form.projectId;
+                        })()
+                      : "Nessuno"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Nessuno</SelectItem>
@@ -624,7 +631,14 @@ export default function EisenhowerPage() {
           }
         >
           <SelectTrigger className="w-[150px] h-9">
-            <SelectValue placeholder="Progetto" />
+            <SelectValue>
+              {filters.projectId
+                ? (() => {
+                    const p = (projects || []).find((p: Project) => p.id === filters.projectId);
+                    return p ? p.name : filters.projectId;
+                  })()
+                : "Progetto"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(projects || []).map((p: Project) => (

@@ -610,7 +610,14 @@ export default function CalendarPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Progetto" />
+                  <SelectValue>
+                    {form.linkedProjectId
+                      ? (() => {
+                          const p = (projects || []).find((p: Project) => p.id === form.linkedProjectId);
+                          return p ? p.name : form.linkedProjectId;
+                        })()
+                      : "Progetto"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(projects || []).map((p: Project) => (
